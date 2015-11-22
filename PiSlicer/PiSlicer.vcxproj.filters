@@ -13,6 +13,12 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Source Files\Win32">
+      <UniqueIdentifier>{5dba4f35-f2d2-4a96-b2c6-e01fb88f5be1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\linux">
+      <UniqueIdentifier>{935095fa-665b-43e1-96eb-bf49065e2d20}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <Text Include="SConscript" />
@@ -22,7 +28,16 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Win32\Platform.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\Win32</Filter>
+    </ClCompile>
+    <ClCompile Include="linux\Platform.cpp">
+      <Filter>Source Files\linux</Filter>
+    </ClCompile>
+    <ClCompile Include="linux\Gpios.cpp">
+      <Filter>Source Files\linux</Filter>
+    </ClCompile>
+    <ClCompile Include="Win32\Gpios.cpp">
+      <Filter>Source Files\Win32</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -30,6 +45,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Platform.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Gpios.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

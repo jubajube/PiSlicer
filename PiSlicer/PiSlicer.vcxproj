@@ -22,10 +22,24 @@
     <Text Include="SConscript" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="linux\Gpios.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="linux\Platform.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="PiSlicer.cpp" />
+    <ClCompile Include="Win32\Gpios.cpp" />
     <ClCompile Include="Win32\Platform.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Gpios.hpp" />
     <ClInclude Include="PiSlicer.hpp" />
     <ClInclude Include="Platform.hpp" />
   </ItemGroup>
