@@ -21,6 +21,9 @@
     <ClCompile Include="PiSlicer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Win32\Platform.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="PiSlicer.hpp">

@@ -23,6 +23,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="PiSlicer.cpp" />
+    <ClCompile Include="Win32\Platform.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="PiSlicer.hpp" />
@@ -31,25 +32,26 @@
   <PropertyGroup Label="Globals">
     <ProjectGuid>{2D226CFE-9BAB-449B-91E2-92F170CE6558}</ProjectGuid>
     <Keyword>MakeFileProj</Keyword>
+    <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
-    <ConfigurationType>Makefile</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v140</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
-    <ConfigurationType>Makefile</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v140</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v140</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v140</PlatformToolset>
   </PropertyGroup>
@@ -77,9 +79,21 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <NMakePreprocessorDefinitions>WIN32;_DEBUG;$(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
+    <OutDir>$(SolutionDir)Build\$(Configuration)\$(Platform)\lib\</OutDir>
+    <IntDir>$(SolutionDir)Build\$(Configuration)\$(Platform)\obj\$(ProjectName)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <NMakePreprocessorDefinitions>WIN32;NDEBUG;$(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
+    <OutDir>$(SolutionDir)Build\$(Configuration)\$(Platform)\lib\</OutDir>
+    <IntDir>$(SolutionDir)Build\$(Configuration)\$(Platform)\obj\$(ProjectName)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>$(SolutionDir)Build\$(Configuration)\$(Platform)\lib\</OutDir>
+    <IntDir>$(SolutionDir)Build\$(Configuration)\$(Platform)\obj\$(ProjectName)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>$(SolutionDir)Build\$(Configuration)\$(Platform)\lib\</OutDir>
+    <IntDir>$(SolutionDir)Build\$(Configuration)\$(Platform)\obj\$(ProjectName)\</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup>
   </ItemDefinitionGroup>
