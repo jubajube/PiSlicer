@@ -19,6 +19,9 @@
     <Filter Include="Source Files\linux">
       <UniqueIdentifier>{935095fa-665b-43e1-96eb-bf49065e2d20}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\linux">
+      <UniqueIdentifier>{5c95d6fa-7b56-4023-8a06-e4c9f2f7777d}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <Text Include="SConscript" />
@@ -39,6 +42,9 @@
     <ClCompile Include="Win32\Gpios.cpp">
       <Filter>Source Files\Win32</Filter>
     </ClCompile>
+    <ClCompile Include="linux\PeripheralMap.cpp">
+      <Filter>Source Files\linux</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="PiSlicer.hpp">
@@ -49,6 +55,12 @@
     </ClInclude>
     <ClInclude Include="Gpios.hpp">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="IGpio.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="linux\PeripheralMap.hpp">
+      <Filter>Header Files\linux</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

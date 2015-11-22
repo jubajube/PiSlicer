@@ -1,5 +1,7 @@
-#ifndef PI_SLICER_GPIO_H
-#define PI_SLICER_GPIO_H
+#ifndef PI_SLICER_GPIOS_H
+#define PI_SLICER_GPIOS_H
+
+#include "IGpio.hpp"
 
 #include <memory>
 #include <stdint.h>
@@ -25,7 +27,7 @@ namespace PiSlicer {
         /**
          * @todo Needs documentation
          */
-        uint32_t GetBase();
+        std::shared_ptr< IGpio > GetGpio(int gpioNumber);
 
         // Private properties
     private:
@@ -37,4 +39,4 @@ namespace PiSlicer {
 
 }
 
-#endif /* PI_SLICER_GPIO_H */
+#endif /* PI_SLICER_GPIOS_H */
