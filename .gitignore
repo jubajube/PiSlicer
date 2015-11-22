@@ -1,0 +1,12 @@
+ipch/
+generated/
+Debug*/
+Release*/
+*.opensdf
+*.sdf
+*.suo
+*.xccheckout
+*.user
+xcuserdata/
+Thumbs.db
+.sconsign.dblite
