@@ -91,13 +91,18 @@ root = Environment(
         "-x", "assembler-with-cpp",
         "-c",
     ],
+    CFLAGS = [
+        "-std=c1x",
+    ],
     CCFLAGS = [
         "-Wall",
     ],
     CXXFLAGS = [
+        "-std=c++0x",
         "-fno-exceptions",
     ],
     CPPDEFINES = [
+        "__STDC_FORMAT_MACROS",
     ],
     CPPPATH = [
         "#",
