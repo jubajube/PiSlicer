@@ -42,6 +42,7 @@ platforms = {
         ],
         "CCFLAGS": [
             "-fPIC",
+            "-mabi=aapcs-linux",
         ],
         "LINKFLAGS": [
         ],
@@ -85,6 +86,8 @@ configurations = {
 root = Environment(
     # Toolchain selection
     tools = ["as", "gcc", "g++", "gnulink", "ar"],
+    CC = "clang",
+    CXX = "clang++",
 
     # Toolchain defaults
     ASFLAGS = [
@@ -92,13 +95,13 @@ root = Environment(
         "-c",
     ],
     CFLAGS = [
-        "-std=c1x",
+        "-std=c11",
     ],
     CCFLAGS = [
         "-Wall",
     ],
     CXXFLAGS = [
-        "-std=c++0x",
+        "-std=c++11",
         "-fno-exceptions",
     ],
     CPPDEFINES = [
