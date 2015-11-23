@@ -29,8 +29,10 @@ for platform in platforms:
         kernelVersion = os.popen("uname -r").read().strip()
         path = Dir(".").srcnode().abspath
         name = os.path.basename(path)
-        module = "%s.ko" % (name)
-        env.Command(module, "", "make -C /lib/modules/%s/build M=%s modules" % (kernelVersion, path))
+        object = "%s.ko" % (name)
+        module = env.Command(object, "", "make -C /lib/modules/%s/build M=%s modules" % (kernelVersion, path))
+        if env.GetOption("clean"):
+            env.Execute("make -C /lib/modules/%s/build M=%s clean" % (kernelVersion, path))
         deployedModule = env.Deploy("#${BUILD}bin", module)
         products[platform] = {
             "module": deployedModule
