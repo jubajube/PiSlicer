@@ -16,6 +16,7 @@ import sys
 components = [
     # Level 0: No dependencies
     "PiSlicer",
+    "sma420564",
 
     # Level 1: Depends on:
     #     PiSlicer
