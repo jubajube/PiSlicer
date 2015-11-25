@@ -30,10 +30,9 @@ for platform in platforms:
         path = Dir(".").srcnode().abspath
         name = os.path.basename(path)
         object = "%s.ko" % (name)
-        module = env.Command(object, "", "make -C /lib/modules/%s/build M=%s modules" % (kernelVersion, path))
-        if env.GetOption("clean"):
-            env.Execute("make -C /lib/modules/%s/build M=%s clean" % (kernelVersion, path))
-        deployedModule = env.Deploy("#${BUILD}bin", module)
+        target = "clean" if env.GetOption("clean") else "modules"
+        env.Execute("make -C /lib/modules/%s/build M=%s %s" % (kernelVersion, path, target))
+        deployedModule = env.Deploy("#${BUILD}bin", object)
         products[platform] = {
             "module": deployedModule
         }
