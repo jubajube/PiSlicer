@@ -16,9 +16,9 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "HelloWorld", "HelloWorld\He
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "sma420564", "sma420564", "{D34921C3-C702-4399-A01C-C8585F8E7B6F}"
 	ProjectSection(SolutionItems) = preProject
-		sma420564\hello-1.c = sma420564\hello-1.c
 		sma420564\Makefile = sma420564\Makefile
 		sma420564\SConscript = sma420564\SConscript
+		sma420564\sma420564.c = sma420564\sma420564.c
 	EndProjectSection
 EndProject
 Global
