@@ -94,10 +94,10 @@ static struct sma420564_gpio_definition sma420564_gpio_definitions[SMA420564_GPI
     { "Segment E anode", 16, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_LOW */ },
     { "Segment F anode", 20, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_LOW */ },
     { "Segment G anode", 21, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_LOW */ },
-    { "Digit 1 cathode", 6, GPIOF_OUT_INIT_HIGH /* GPIOD_OUT_HIGH */ },
-    { "Digit 2 cathode", 13, GPIOF_OUT_INIT_HIGH /* GPIOD_OUT_HIGH */ },
-    { "Digit 3 cathode", 19, GPIOF_OUT_INIT_HIGH /* GPIOD_OUT_HIGH */ },
-    { "Digit 4 cathode", 26, GPIOF_OUT_INIT_HIGH /* GPIOD_OUT_HIGH */ }
+    { "Digit 1 cathode", 6, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_HIGH */ },
+    { "Digit 2 cathode", 13, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_HIGH */ },
+    { "Digit 3 cathode", 19, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_HIGH */ },
+    { "Digit 4 cathode", 26, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_HIGH */ }
 };
 
 struct sma420564_device {
