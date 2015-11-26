@@ -274,7 +274,7 @@ static ssize_t digits_store(struct device* dev, struct device_attribute* attr, c
     }
     while (
         (digit_in >= 0)
-        && (buf[digit_in] <= 32)
+        && (buf[digit_in] < 32)
     ) {
         --digit_in;
     }
