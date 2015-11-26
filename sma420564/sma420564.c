@@ -63,65 +63,56 @@
 //#include <linux/platform_device.h>
 
 struct sma420564_device {
-    int hello2_created;
-    char display[4];
+    char digits[4];
     struct device dev;
 };
 
-static ssize_t hello2_show(struct device* dev, struct device_attribute* attr, char* buf) {
-    return scnprintf(buf, PAGE_SIZE, "Hello2!\n");
-}
-
-static DEVICE_ATTR_RO(hello2);
-
-static ssize_t hello_show(struct device* dev, struct device_attribute* attr, char* buf) {
-    return scnprintf(buf, PAGE_SIZE, "Hello!\n");
-}
-
-static ssize_t hello_store(struct device* dev, struct device_attribute* attr, const char* buf, size_t len) {
+static ssize_t digits_show(struct device* dev, struct device_attribute* attr, char* buf) {
     struct sma420564_device* dev_impl = container_of(dev, struct sma420564_device, dev);
-    int trimmed;
-    int ret;
+    return scnprintf(
+        buf, PAGE_SIZE,
+        "%c%c%c%c",
+        dev_impl->digits[0],
+        dev_impl->digits[1],
+        dev_impl->digits[2],
+        dev_impl->digits[3]
+    );
+}
 
-    for (trimmed = 0; trimmed < len; ++trimmed) {
-        if (buf[trimmed] <= 32) {
-            break;
+static ssize_t digits_store(struct device* dev, struct device_attribute* attr, const char* buf, size_t len) {
+    struct sma420564_device* dev_impl = container_of(dev, struct sma420564_device, dev);
+    int digit_in = 3;
+    int digit_out = 3;
+
+    if (digit_in >= len) {
+        digit_in = len - 1;
+    }
+    while (
+        (digit_in >= 0)
+        && (buf[digit_in] <= 32)
+    ) {
+        --digit_in;
+    }
+    while (digit_out >= 0) {
+        if (digit_in >= 0) {
+            dev_impl->digits[digit_out--] = buf[digit_in--];
+        } else {
+            dev_impl->digits[digit_out--] = ' ';
         }
     }
 
-    if (sysfs_streq(buf, "create")) {
-        if (dev_impl->hello2_created) {
-            pr_info("hello2 attribute already created\n");
-        } else {
-            ret = device_create_file(dev, &dev_attr_hello2);
-            if (ret) {
-                pr_err("unable to create hello2 attribute: error code %d\n", ret);
-            } else {
-                pr_info("created hello2 attribute\n");
-                dev_impl->hello2_created = 1;
-            }
-        }
-    } else if (sysfs_streq(buf, "remove")) {
-        if (dev_impl->hello2_created) {
-            device_remove_file(dev, &dev_attr_hello2);
-            dev_impl->hello2_created = 0;
-            pr_info("removed hello2 attribute\n");
-        } else {
-            pr_info("did not remove hello2 attribute because it was not present\n");
-        }
-    }
     return len;
 }
 
-static DEVICE_ATTR_RW(hello);
+static DEVICE_ATTR_RW(digits);
 
-static struct attribute* sma420564_default_attrs[] = {
-    &dev_attr_hello.attr,
+static struct attribute* sma420564_attrs[] = {
+    &dev_attr_digits.attr,
     NULL
 };
 
 static const struct attribute_group sma420564_attr_group = {
-    .attrs = sma420564_default_attrs,
+    .attrs = sma420564_attrs,
 };
 
 static const struct attribute_group* sma420564_attr_groups[] = {
@@ -134,7 +125,7 @@ static void sma420564_device_release(struct device* dev) {
 }
 
 static struct sma420564_device sma420564_device = {
-    .display = {' ', ' ', ' ', ' '},
+    .digits = {' ', ' ', ' ', ' '},
     .dev = {
         .release = sma420564_device_release,
         .groups = sma420564_attr_groups,
@@ -144,9 +135,7 @@ static struct sma420564_device sma420564_device = {
 static int sma420564_init(void) {
     int ret;
 
-    pr_info("Hello, World!\n");
-
-    ret = dev_set_name(&sma420564_device.dev, "sma420564");
+    ret = dev_set_name(&sma420564_device.dev, KBUILD_MODNAME);
     if (ret) {
         pr_err("unable to set root device name: error code %d\n", ret);
         return ret;
@@ -161,7 +150,6 @@ static int sma420564_init(void) {
 }
 
 static void sma420564_exit(void) {
-    pr_info("Goodbye, World!\n");
     device_unregister(&sma420564_device.dev);
 }
 
