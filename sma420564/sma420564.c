@@ -342,6 +342,7 @@ static int sma420564_init(void) {
             sma420564_device.gpios[gpio] = gpio_to_desc(sma420564_gpio_definitions[gpio].gpio);
             if (IS_ERR(sma420564_device.gpios[gpio])) {
                 pr_err("unable to get description for GPIO %u\n", sma420564_gpio_definitions[gpio].gpio);
+                sma420564_device.gpios[gpio] = NULL;
             }
         }
     }
