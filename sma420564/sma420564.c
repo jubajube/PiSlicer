@@ -65,7 +65,7 @@
 //#include <linux/platform_device.h>
 #include <linux/workqueue.h>
 
-#define DIGIT_TIMER_PERIOD_NS 1000000
+#define DEFAULT_REFRESH_RATE_HZ 100
 
 enum sma420564_gpios {
     SMA420564_GPIO_SEGMENT_A = 0,
@@ -105,24 +105,15 @@ static struct sma420564_gpio_definition sma420564_gpio_definitions[SMA420564_GPI
 
 struct sma420564_device {
     struct device dev;
+
     char digits[4];
+    unsigned long refresh_rate_hz;
+
     int active_digit;
     struct gpio_desc* gpios[SMA420564_GPIO_MAX];
     struct work_struct update_digits_work;
     struct hrtimer digit_timer;
 };
-
-static ssize_t digits_show(struct device* dev, struct device_attribute* attr, char* buf) {
-    struct sma420564_device* dev_impl = container_of(dev, struct sma420564_device, dev);
-    return scnprintf(
-        buf, PAGE_SIZE,
-        "%c%c%c%c",
-        dev_impl->digits[0],
-        dev_impl->digits[1],
-        dev_impl->digits[2],
-        dev_impl->digits[3]
-    );
-}
 
 static void update_digits(struct work_struct* work) {
     struct sma420564_device* dev_impl = container_of(work, struct sma420564_device, update_digits_work);
@@ -133,7 +124,6 @@ static void update_digits(struct work_struct* work) {
     if (++dev_impl->active_digit > 3) {
         dev_impl->active_digit = 0;
     }
-    gpiod_set_value_cansleep(dev_impl->gpios[SMA420564_GPIO_DIGIT_1 + dev_impl->active_digit], 0);
 
     /*
      * Digit  Segment   Code   Spatial Arrangement
@@ -169,6 +159,20 @@ static void update_digits(struct work_struct* work) {
         gpiod_set_value_cansleep(dev_impl->gpios[gpio], (segments_out & 1));
         segments_out >>= 1;
     }
+
+    gpiod_set_value_cansleep(dev_impl->gpios[SMA420564_GPIO_DIGIT_1 + dev_impl->active_digit], 0);
+}
+
+static ssize_t digits_show(struct device* dev, struct device_attribute* attr, char* buf) {
+    struct sma420564_device* dev_impl = container_of(dev, struct sma420564_device, dev);
+    return scnprintf(
+        buf, PAGE_SIZE,
+        "%c%c%c%c",
+        dev_impl->digits[0],
+        dev_impl->digits[1],
+        dev_impl->digits[2],
+        dev_impl->digits[3]
+    );
 }
 
 static ssize_t digits_store(struct device* dev, struct device_attribute* attr, const char* buf, size_t len) {
@@ -198,8 +202,22 @@ static ssize_t digits_store(struct device* dev, struct device_attribute* attr, c
 
 static DEVICE_ATTR_RW(digits);
 
+static ssize_t refresh_show(struct device* dev, struct device_attribute* attr, char* buf) {
+    struct sma420564_device* dev_impl = container_of(dev, struct sma420564_device, dev);
+    return scnprintf(buf, PAGE_SIZE, "%lu", dev_impl->refresh_rate_hz);
+}
+
+static ssize_t refresh_store(struct device* dev, struct device_attribute* attr, const char* buf, size_t len) {
+    struct sma420564_device* dev_impl = container_of(dev, struct sma420564_device, dev);
+    (void)sscanf(buf, "%lu", &dev_impl->refresh_rate_hz);
+    return len;
+}
+
+static DEVICE_ATTR_RW(refresh);
+
 static struct attribute* sma420564_attrs[] = {
     &dev_attr_digits.attr,
+    &dev_attr_refresh.attr,
     NULL
 };
 
@@ -221,12 +239,13 @@ static void sma420564_device_release(struct device* dev) {
 static enum hrtimer_restart sma420564_digit_timer_tick(struct hrtimer* data) {
     struct sma420564_device* dev_impl = container_of(data, struct sma420564_device, digit_timer);
     (void)schedule_work(&dev_impl->update_digits_work);
-    hrtimer_add_expires_ns(&dev_impl->digit_timer, DIGIT_TIMER_PERIOD_NS);
+    hrtimer_add_expires_ns(&dev_impl->digit_timer, 1000000000 / (4 * dev_impl->refresh_rate_hz));
     return HRTIMER_RESTART;
 }
 
 static struct sma420564_device sma420564_device = {
     .digits = {' ', ' ', ' ', ' '},
+    .refresh_rate_hz = DEFAULT_REFRESH_RATE_HZ,
     .dev = {
         .release = sma420564_device_release,
         .groups = sma420564_attr_groups,
@@ -312,6 +331,6 @@ static void sma420564_exit(void) {
 module_init(sma420564_init);
 module_exit(sma420564_exit);
 
-MODULE_DESCRIPTION("");
+MODULE_DESCRIPTION("SMA420564 LED Driver");
 MODULE_AUTHOR("Richard Walters <jubajube@gmail.com>");
 MODULE_LICENSE("Dual MIT/GPL");
