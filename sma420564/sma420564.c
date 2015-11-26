@@ -217,6 +217,7 @@ static int sma420564_init(void) {
     enum sma420564_gpios gpio;
     int ret;
 
+    INIT_WORK(&sma420564_device.update_digits_work, update_digits);
     ret = dev_set_name(&sma420564_device.dev, KBUILD_MODNAME);
     if (ret) {
         pr_err("unable to set root device name: error code %d\n", ret);
@@ -248,8 +249,6 @@ static int sma420564_init(void) {
             }
         }
     }
-
-    INIT_WORK(&sma420564_device.update_digits_work, update_digits);
 
     schedule_work(&sma420564_device.update_digits_work);
 
