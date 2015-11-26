@@ -65,7 +65,8 @@
 //#include <linux/platform_device.h>
 #include <linux/workqueue.h>
 
-#define DEFAULT_REFRESH_RATE_HZ 100
+#define DEFAULT_REFRESH_RATE_HZ    100
+#define DEFAULT_BRIGHTNESS_PERCENT 100
 
 enum sma420564_gpios {
     SMA420564_GPIO_SEGMENT_A = 0,
@@ -108,59 +109,91 @@ struct sma420564_device {
 
     char digits[4];
     unsigned long refresh_rate_hz;
+    int brightness_percent;
 
+    int resting;
+    int last_digit;
     int active_digit;
+    int segments_out;
+    int duty_cycle_percent;
     struct gpio_desc* gpios[SMA420564_GPIO_MAX];
     struct work_struct update_digits_work;
     struct hrtimer digit_timer;
 };
 
-static void update_digits(struct work_struct* work) {
-    struct sma420564_device* dev_impl = container_of(work, struct sma420564_device, update_digits_work);
+static void prepare_update_digits(struct sma420564_device* dev_impl) {
     enum sma420564_gpios gpio;
     int segments_out;
+    int segments_lit = 0;
 
-    gpiod_set_value_cansleep(dev_impl->gpios[SMA420564_GPIO_DIGIT_1 + dev_impl->active_digit], 1);
-    if (++dev_impl->active_digit > 3) {
-        dev_impl->active_digit = 0;
+    if (
+        (dev_impl->duty_cycle_percent > 0)
+        && (dev_impl->duty_cycle_percent < 100)
+    ) {
+        dev_impl->resting = !dev_impl->resting;
+    } else {
+        dev_impl->resting = 0;
     }
+    if (!dev_impl->resting) {
+        if (++dev_impl->active_digit > 3) {
+            dev_impl->active_digit = 0;
+        }
 
-    /*
-     * Digit  Segment   Code   Spatial Arrangement
-     *       XGFE DCBA
-     * ----- ---------  ----   -------------------
-     *   0   0011 1111  0x3F
-     *   1   0000 0110  0x06          AAAA
-     *   2   0101 1011  0x5B         F    B
-     *   3   0100 1111  0x4F         F    B
-     *   4   0110 0110  0x66          GGGG
-     *   5   0110 1101  0x6D         E    C
-     *   6   0111 1101  0x7D         E    C
-     *   7   0000 0111  0x07          DDDD
-     *   8   0111 1111  0x7F
-     *   9   0110 1111  0x6F
-     */
-    segments_out = 0;
-    switch (dev_impl->digits[dev_impl->active_digit]) {
-    case '0': segments_out = 0x3F; break;
-    case '1': segments_out = 0x06; break;
-    case '2': segments_out = 0x5B; break;
-    case '3': segments_out = 0x4F; break;
-    case '4': segments_out = 0x66; break;
-    case '5': segments_out = 0x6D; break;
-    case '6': segments_out = 0x7D; break;
-    case '7': segments_out = 0x07; break;
-    case '8': segments_out = 0x7F; break;
-    case '9': segments_out = 0x6F; break;
-    case ' ':
-    default:  segments_out = 0x00; break;
+        /*
+         * Digit  Segment   Code   Spatial Arrangement
+         *       XGFE DCBA
+         * ----- ---------  ----   -------------------
+         *   0   0011 1111  0x3F
+         *   1   0000 0110  0x06          AAAA
+         *   2   0101 1011  0x5B         F    B
+         *   3   0100 1111  0x4F         F    B
+         *   4   0110 0110  0x66          GGGG
+         *   5   0110 1101  0x6D         E    C
+         *   6   0111 1101  0x7D         E    C
+         *   7   0000 0111  0x07          DDDD
+         *   8   0111 1111  0x7F
+         *   9   0110 1111  0x6F
+         */
+        segments_out = 0;
+        switch (dev_impl->digits[dev_impl->active_digit]) {
+        case '0': segments_out = 0x3F; break;
+        case '1': segments_out = 0x06; break;
+        case '2': segments_out = 0x5B; break;
+        case '3': segments_out = 0x4F; break;
+        case '4': segments_out = 0x66; break;
+        case '5': segments_out = 0x6D; break;
+        case '6': segments_out = 0x7D; break;
+        case '7': segments_out = 0x07; break;
+        case '8': segments_out = 0x7F; break;
+        case '9': segments_out = 0x6F; break;
+        case ' ':
+        default:  segments_out = 0x00; break;
+        }
+        dev_impl->segments_out = segments_out;
+        for (gpio = SMA420564_GPIO_SEGMENT_A; gpio <= SMA420564_GPIO_SEGMENT_G; ++gpio) {
+            if ((segments_out & 1) != 0) {
+                ++segments_lit;
+            }
+            segments_out >>= 1;
+        }
+        dev_impl->duty_cycle_percent = dev_impl->brightness_percent * segments_lit / 7;
     }
-    for (gpio = SMA420564_GPIO_SEGMENT_A; gpio <= SMA420564_GPIO_SEGMENT_G; ++gpio) {
-        gpiod_set_value_cansleep(dev_impl->gpios[gpio], (segments_out & 1));
-        segments_out >>= 1;
-    }
+}
 
-    gpiod_set_value_cansleep(dev_impl->gpios[SMA420564_GPIO_DIGIT_1 + dev_impl->active_digit], 0);
+static void execute_update_digits(struct work_struct* work) {
+    struct sma420564_device* dev_impl = container_of(work, struct sma420564_device, update_digits_work);
+    enum sma420564_gpios gpio;
+    int segments_out = dev_impl->segments_out;
+
+    gpiod_set_value_cansleep(dev_impl->gpios[SMA420564_GPIO_DIGIT_1 + dev_impl->last_digit], 1);
+    if (!dev_impl->resting) {
+        for (gpio = SMA420564_GPIO_SEGMENT_A; gpio <= SMA420564_GPIO_SEGMENT_G; ++gpio) {
+            gpiod_set_value_cansleep(dev_impl->gpios[gpio], (segments_out & 1));
+            segments_out >>= 1;
+        }
+        gpiod_set_value_cansleep(dev_impl->gpios[SMA420564_GPIO_DIGIT_1 + dev_impl->active_digit], 0);
+        dev_impl->last_digit = dev_impl->active_digit;
+    }
 }
 
 static ssize_t digits_show(struct device* dev, struct device_attribute* attr, char* buf) {
@@ -215,9 +248,23 @@ static ssize_t refresh_store(struct device* dev, struct device_attribute* attr, 
 
 static DEVICE_ATTR_RW(refresh);
 
+static ssize_t brightness_show(struct device* dev, struct device_attribute* attr, char* buf) {
+    struct sma420564_device* dev_impl = container_of(dev, struct sma420564_device, dev);
+    return scnprintf(buf, PAGE_SIZE, "%d", dev_impl->brightness_percent);
+}
+
+static ssize_t brightness_store(struct device* dev, struct device_attribute* attr, const char* buf, size_t len) {
+    struct sma420564_device* dev_impl = container_of(dev, struct sma420564_device, dev);
+    (void)sscanf(buf, "%d", &dev_impl->brightness_percent);
+    return len;
+}
+
+static DEVICE_ATTR_RW(brightness);
+
 static struct attribute* sma420564_attrs[] = {
     &dev_attr_digits.attr,
     &dev_attr_refresh.attr,
+    &dev_attr_brightness.attr,
     NULL
 };
 
@@ -238,14 +285,24 @@ static void sma420564_device_release(struct device* dev) {
 
 static enum hrtimer_restart sma420564_digit_timer_tick(struct hrtimer* data) {
     struct sma420564_device* dev_impl = container_of(data, struct sma420564_device, digit_timer);
+    unsigned long period = 1000000000 / (4 * dev_impl->refresh_rate_hz);
+
+    prepare_update_digits(dev_impl);
+    if (
+        (dev_impl->duty_cycle_percent > 0)
+        && (dev_impl->duty_cycle_percent < 100)
+    ) {
+        period = period / 100 * (dev_impl->resting ? (100 - dev_impl->duty_cycle_percent) : dev_impl->duty_cycle_percent);
+    }
     (void)schedule_work(&dev_impl->update_digits_work);
-    hrtimer_add_expires_ns(&dev_impl->digit_timer, 1000000000 / (4 * dev_impl->refresh_rate_hz));
+    hrtimer_add_expires_ns(&dev_impl->digit_timer, period);
     return HRTIMER_RESTART;
 }
 
 static struct sma420564_device sma420564_device = {
     .digits = {' ', ' ', ' ', ' '},
     .refresh_rate_hz = DEFAULT_REFRESH_RATE_HZ,
+    .brightness_percent = DEFAULT_BRIGHTNESS_PERCENT,
     .dev = {
         .release = sma420564_device_release,
         .groups = sma420564_attr_groups,
@@ -256,7 +313,7 @@ static int sma420564_init(void) {
     enum sma420564_gpios gpio;
     int ret;
 
-    INIT_WORK(&sma420564_device.update_digits_work, update_digits);
+    INIT_WORK(&sma420564_device.update_digits_work, execute_update_digits);
     ret = dev_set_name(&sma420564_device.dev, KBUILD_MODNAME);
     if (ret) {
         pr_err("unable to set root device name: error code %d\n", ret);
