@@ -58,14 +58,14 @@
 #include <linux/device.h>
 #include <linux/gpio.h>
 #include <linux/gpio/consumer.h>
+#include <linux/hrtimer.h>
 #include <linux/kernel.h>
 #include <linux/kobject.h>
 #include <linux/module.h>
 //#include <linux/platform_device.h>
-#include <linux/timer.h>
 #include <linux/workqueue.h>
 
-#define DIGIT_TIMER_JIFFIES (HZ / 100)
+#define DIGIT_TIMER_PERIOD_NS 1000000
 
 enum sma420564_gpios {
     SMA420564_GPIO_SEGMENT_A = 0,
@@ -109,7 +109,7 @@ struct sma420564_device {
     int active_digit;
     struct gpio_desc* gpios[SMA420564_GPIO_MAX];
     struct work_struct update_digits_work;
-    struct timer_list digit_timer;
+    struct hrtimer digit_timer;
 };
 
 static ssize_t digits_show(struct device* dev, struct device_attribute* attr, char* buf) {
@@ -214,15 +214,15 @@ static const struct attribute_group* sma420564_attr_groups[] = {
 
 static void sma420564_device_release(struct device* dev) {
     struct sma420564_device* dev_impl = container_of(dev, struct sma420564_device, dev);
-    (void)del_timer_sync(&dev_impl->digit_timer);
+    (void)hrtimer_cancel(&dev_impl->digit_timer);
     (void)cancel_work_sync(&dev_impl->update_digits_work);
 }
 
-static void sma420564_digit_timer_tick(unsigned long arg) {
-    struct sma420564_device* dev_impl = (struct sma420564_device*)arg;
+static enum hrtimer_restart sma420564_digit_timer_tick(struct hrtimer* data) {
+    struct sma420564_device* dev_impl = container_of(data, struct sma420564_device, digit_timer);
     (void)schedule_work(&dev_impl->update_digits_work);
-    dev_impl->digit_timer.expires += DIGIT_TIMER_JIFFIES;
-    add_timer(&dev_impl->digit_timer);
+    hrtimer_add_expires_ns(&dev_impl->digit_timer, DIGIT_TIMER_PERIOD_NS);
+    return HRTIMER_RESTART;
 }
 
 static struct sma420564_device sma420564_device = {
@@ -231,7 +231,6 @@ static struct sma420564_device sma420564_device = {
         .release = sma420564_device_release,
         .groups = sma420564_attr_groups,
     },
-    .digit_timer = TIMER_INITIALIZER(sma420564_digit_timer_tick, 0, 0),
 };
 
 static int sma420564_init(void) {
@@ -271,9 +270,9 @@ static int sma420564_init(void) {
         }
     }
 
-    sma420564_device.digit_timer.data = (unsigned long)&sma420564_device;
-    sma420564_device.digit_timer.expires = jiffies;
-    add_timer(&sma420564_device.digit_timer);
+    hrtimer_init(&sma420564_device.digit_timer, CLOCK_MONOTONIC, HRTIMER_MODE_ABS);
+    sma420564_device.digit_timer.function = sma420564_digit_timer_tick;
+    hrtimer_start(&sma420564_device.digit_timer, ktime_get(), HRTIMER_MODE_ABS);
 
     return 0;
 }
