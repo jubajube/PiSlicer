@@ -153,6 +153,35 @@ static void prepare_update_digits(struct sma420564_device* dev_impl) {
          *   7   0000 0111  0x07          DDDD
          *   8   0111 1111  0x7F
          *   9   0110 1111  0x6F
+         *
+         *   -   0100 0000  0x40
+         *
+         *   A   0111 0111  0x77
+         *   B   0111 1111  0x7F
+         *   C   0011 1001  0x39
+         *   D   0011 1111  0x3F
+         *   E   0111 1001  0x79
+         *   F   0111 0001  0x71
+         *   G   0111 1111  0x7F
+         *   H   0111 0110  0x76
+         *   I   0000 0110  0x06
+         *   J   0000 1110  0x0E
+         *   K   0111 0110  0x76
+         *   L   0011 1000  0x38
+         *   M   0011 0111  0x37
+         *   N   0011 0111  0x37
+         *   O   0011 1111  0x3F
+         *   P   0111 0011  0x73
+         *   Q   0011 1111  0x3F
+         *   R   0111 0111  0x77
+         *   S   0110 1101  0x6D
+         *   T   0011 0001  0x31
+         *   U   0011 1110  0x3E
+         *   V   0011 1110  0x3E
+         *   W   0011 1110  0x3E
+         *   X   0111 0110  0x76
+         *   Y   0111 0010  0x72
+         *   Z   0101 1011  0x5B
          */
         segments_out = 0;
         switch (dev_impl->digits[dev_impl->active_digit]) {
@@ -166,6 +195,33 @@ static void prepare_update_digits(struct sma420564_device* dev_impl) {
         case '7': segments_out = 0x07; break;
         case '8': segments_out = 0x7F; break;
         case '9': segments_out = 0x6F; break;
+        case '-': segments_out = 0x40; break;
+        case 'A': segments_out = 0x77; break;
+        case 'B': segments_out = 0x7F; break;
+        case 'C': segments_out = 0x39; break;
+        case 'D': segments_out = 0x3F; break;
+        case 'E': segments_out = 0x79; break;
+        case 'F': segments_out = 0x71; break;
+        case 'G': segments_out = 0x7F; break;
+        case 'H': segments_out = 0x76; break;
+        case 'I': segments_out = 0x06; break;
+        case 'J': segments_out = 0x0E; break;
+        case 'K': segments_out = 0x76; break;
+        case 'L': segments_out = 0x38; break;
+        case 'M': segments_out = 0x37; break;
+        case 'N': segments_out = 0x37; break;
+        case 'O': segments_out = 0x3F; break;
+        case 'P': segments_out = 0x73; break;
+        case 'Q': segments_out = 0x3F; break;
+        case 'R': segments_out = 0x77; break;
+        case 'S': segments_out = 0x6D; break;
+        case 'T': segments_out = 0x31; break;
+        case 'U': segments_out = 0x3E; break;
+        case 'V': segments_out = 0x3E; break;
+        case 'W': segments_out = 0x3E; break;
+        case 'X': segments_out = 0x76; break;
+        case 'Y': segments_out = 0x72; break;
+        case 'Z': segments_out = 0x5B; break;
         case ' ':
         default:  segments_out = 0x00; break;
         }
