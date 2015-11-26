@@ -62,7 +62,10 @@
 #include <linux/kobject.h>
 #include <linux/module.h>
 //#include <linux/platform_device.h>
+#include <linux/timer.h>
 #include <linux/workqueue.h>
+
+#define DIGIT_TIMER_JIFFIES (HZ / 100)
 
 enum sma420564_gpios {
     SMA420564_GPIO_SEGMENT_A = 0,
@@ -94,17 +97,19 @@ static struct sma420564_gpio_definition sma420564_gpio_definitions[SMA420564_GPI
     { "Segment E anode", 16, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_LOW */ },
     { "Segment F anode", 20, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_LOW */ },
     { "Segment G anode", 21, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_LOW */ },
-    { "Digit 1 cathode", 6, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_HIGH */ },
-    { "Digit 2 cathode", 13, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_HIGH */ },
-    { "Digit 3 cathode", 19, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_HIGH */ },
-    { "Digit 4 cathode", 26, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_HIGH */ }
+    { "Digit 1 cathode", 6, GPIOF_OUT_INIT_HIGH /* GPIOD_OUT_HIGH */ },
+    { "Digit 2 cathode", 13, GPIOF_OUT_INIT_HIGH /* GPIOD_OUT_HIGH */ },
+    { "Digit 3 cathode", 19, GPIOF_OUT_INIT_HIGH /* GPIOD_OUT_HIGH */ },
+    { "Digit 4 cathode", 26, GPIOF_OUT_INIT_HIGH /* GPIOD_OUT_HIGH */ }
 };
 
 struct sma420564_device {
     struct device dev;
     char digits[4];
+    int active_digit;
     struct gpio_desc* gpios[SMA420564_GPIO_MAX];
     struct work_struct update_digits_work;
+    struct timer_list digit_timer;
 };
 
 static ssize_t digits_show(struct device* dev, struct device_attribute* attr, char* buf) {
@@ -124,21 +129,29 @@ static void update_digits(struct work_struct* work) {
     enum sma420564_gpios gpio;
     int segments_out;
 
+    gpiod_set_value_cansleep(dev_impl->gpios[SMA420564_GPIO_DIGIT_1 + dev_impl->active_digit], 1);
+    if (++dev_impl->active_digit > 3) {
+        dev_impl->active_digit = 0;
+    }
+    gpiod_set_value_cansleep(dev_impl->gpios[SMA420564_GPIO_DIGIT_1 + dev_impl->active_digit], 0);
+
     /*
-     *   0GFE DCBA
-     * 0 0011 1111  0x3F
-     * 1 0000 0110  0x06
-     * 2 0101 1011  0x5B
-     * 3 0100 1111  0x4F
-     * 4 0110 0110  0x66
-     * 5 0110 1101  0x6D
-     * 6 0111 1101  0x7D
-     * 7 0000 0111  0x07
-     * 8 0111 1111  0x7F
-     * 9 0110 1111  0x6F
+     * Digit  Segment   Code   Spatial Arrangement
+     *       XGFE DCBA
+     * ----- ---------  ----   -------------------
+     *   0   0011 1111  0x3F
+     *   1   0000 0110  0x06          AAAA
+     *   2   0101 1011  0x5B         F    B
+     *   3   0100 1111  0x4F         F    B
+     *   4   0110 0110  0x66          GGGG
+     *   5   0110 1101  0x6D         E    C
+     *   6   0111 1101  0x7D         E    C
+     *   7   0000 0111  0x07          DDDD
+     *   8   0111 1111  0x7F
+     *   9   0110 1111  0x6F
      */
     segments_out = 0;
-    switch (dev_impl->digits[3]) {
+    switch (dev_impl->digits[dev_impl->active_digit]) {
     case '0': segments_out = 0x3F; break;
     case '1': segments_out = 0x06; break;
     case '2': segments_out = 0x5B; break;
@@ -180,8 +193,6 @@ static ssize_t digits_store(struct device* dev, struct device_attribute* attr, c
         }
     }
 
-    schedule_work(&dev_impl->update_digits_work);
-
     return len;
 }
 
@@ -202,7 +213,16 @@ static const struct attribute_group* sma420564_attr_groups[] = {
 };
 
 static void sma420564_device_release(struct device* dev) {
-    pr_info("device released\n");
+    struct sma420564_device* dev_impl = container_of(dev, struct sma420564_device, dev);
+    (void)del_timer_sync(&dev_impl->digit_timer);
+    (void)cancel_work_sync(&dev_impl->update_digits_work);
+}
+
+static void sma420564_digit_timer_tick(unsigned long arg) {
+    struct sma420564_device* dev_impl = (struct sma420564_device*)arg;
+    (void)schedule_work(&dev_impl->update_digits_work);
+    dev_impl->digit_timer.expires += DIGIT_TIMER_JIFFIES;
+    add_timer(&dev_impl->digit_timer);
 }
 
 static struct sma420564_device sma420564_device = {
@@ -211,6 +231,7 @@ static struct sma420564_device sma420564_device = {
         .release = sma420564_device_release,
         .groups = sma420564_attr_groups,
     },
+    .digit_timer = TIMER_INITIALIZER(sma420564_digit_timer_tick, 0, 0),
 };
 
 static int sma420564_init(void) {
@@ -250,13 +271,14 @@ static int sma420564_init(void) {
         }
     }
 
-    schedule_work(&sma420564_device.update_digits_work);
+    sma420564_device.digit_timer.data = (unsigned long)&sma420564_device;
+    sma420564_device.digit_timer.expires = jiffies;
+    add_timer(&sma420564_device.digit_timer);
 
     return 0;
 }
 
 static void sma420564_exit(void) {
-    cancel_work_sync(&sma420564_device.update_digits_work);
     device_unregister(&sma420564_device.dev);
 }
 
