@@ -62,6 +62,7 @@
 #include <linux/kobject.h>
 #include <linux/module.h>
 //#include <linux/platform_device.h>
+#include <linux/workqueue.h>
 
 enum sma420564_gpios {
     SMA420564_GPIO_SEGMENT_A = 0,
@@ -103,6 +104,7 @@ struct sma420564_device {
     struct device dev;
     char digits[4];
     struct gpio_desc* gpios[SMA420564_GPIO_MAX];
+    struct work_struct update_digits_work;
 };
 
 static ssize_t digits_show(struct device* dev, struct device_attribute* attr, char* buf) {
@@ -117,7 +119,8 @@ static ssize_t digits_show(struct device* dev, struct device_attribute* attr, ch
     );
 }
 
-static void update_digits(struct sma420564_device* dev_impl) {
+static void update_digits(struct work_struct* work) {
+    struct sma420564_device* dev_impl = container_of(work, struct sma420564_device, update_digits_work);
     enum sma420564_gpios gpio;
     int segments_out;
 
@@ -150,7 +153,7 @@ static void update_digits(struct sma420564_device* dev_impl) {
     default:  segments_out = 0x00; break;
     }
     for (gpio = SMA420564_GPIO_SEGMENT_A; gpio <= SMA420564_GPIO_SEGMENT_G; ++gpio) {
-        gpiod_set_value(dev_impl->gpios[gpio], (segments_out & 1));
+        gpiod_set_value_cansleep(dev_impl->gpios[gpio], (segments_out & 1));
         segments_out >>= 1;
     }
 }
@@ -177,7 +180,7 @@ static ssize_t digits_store(struct device* dev, struct device_attribute* attr, c
         }
     }
 
-    update_digits(dev_impl);
+    schedule_work(&dev_impl->update_digits_work);
 
     return len;
 }
@@ -245,12 +248,16 @@ static int sma420564_init(void) {
             }
         }
     }
-    update_digits(&sma420564_device);
+
+    INIT_WORK(&sma420564_device.update_digits_work, update_digits);
+
+    schedule_work(&sma420564_device.update_digits_work);
 
     return 0;
 }
 
 static void sma420564_exit(void) {
+    cancel_work_sync(&sma420564_device.update_digits_work);
     device_unregister(&sma420564_device.dev);
 }
 
