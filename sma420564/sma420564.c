@@ -56,15 +56,53 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/device.h>
+#include <linux/gpio.h>
 #include <linux/gpio/consumer.h>
 #include <linux/kernel.h>
 #include <linux/kobject.h>
 #include <linux/module.h>
 //#include <linux/platform_device.h>
 
+enum sma420564_gpios {
+    SMA420564_GPIO_SEGMENT_A = 0,
+    SMA420564_GPIO_SEGMENT_B,
+    SMA420564_GPIO_SEGMENT_C,
+    SMA420564_GPIO_SEGMENT_D,
+    SMA420564_GPIO_SEGMENT_E,
+    SMA420564_GPIO_SEGMENT_F,
+    SMA420564_GPIO_SEGMENT_G,
+    SMA420564_GPIO_DIGIT_1,
+    SMA420564_GPIO_DIGIT_2,
+    SMA420564_GPIO_DIGIT_3,
+    SMA420564_GPIO_DIGIT_4,
+    SMA420564_GPIO_MAX
+};
+
+struct sma420564_gpio_definition {
+    const char* con_id;
+//    enum gpiod_flags flags;
+    unsigned gpio;
+    unsigned long flags;
+};
+
+static struct sma420564_gpio_definition sma420564_gpio_definitions[SMA420564_GPIO_MAX] = {
+    { "Segment A anode", 25, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_LOW */ },
+    { "Segment B anode", 8, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_LOW */ },
+    { "Segment C anode", 7, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_LOW */ },
+    { "Segment D anode", 12, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_LOW */ },
+    { "Segment E anode", 16, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_LOW */ },
+    { "Segment F anode", 20, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_LOW */ },
+    { "Segment G anode", 21, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_LOW */ },
+    { "Digit 1 cathode", 6, GPIOF_OUT_INIT_HIGH /* GPIOD_OUT_HIGH */ },
+    { "Digit 2 cathode", 13, GPIOF_OUT_INIT_HIGH /* GPIOD_OUT_HIGH */ },
+    { "Digit 3 cathode", 19, GPIOF_OUT_INIT_HIGH /* GPIOD_OUT_HIGH */ },
+    { "Digit 4 cathode", 26, GPIOF_OUT_INIT_HIGH /* GPIOD_OUT_HIGH */ }
+};
+
 struct sma420564_device {
-    char digits[4];
     struct device dev;
+    char digits[4];
+    struct gpio_desc* gpios[SMA420564_GPIO_MAX];
 };
 
 static ssize_t digits_show(struct device* dev, struct device_attribute* attr, char* buf) {
@@ -77,6 +115,44 @@ static ssize_t digits_show(struct device* dev, struct device_attribute* attr, ch
         dev_impl->digits[2],
         dev_impl->digits[3]
     );
+}
+
+static void update_digits(struct sma420564_device* dev_impl) {
+    enum sma420564_gpios gpio;
+    int segments_out;
+
+    /*
+     *   0GFE DCBA
+     * 0 0011 1111  0x3F
+     * 1 0000 0110  0x06
+     * 2 0101 1011  0x5B
+     * 3 0100 1111  0x4F
+     * 4 0110 0110  0x66
+     * 5 0110 1101  0x6D
+     * 6 0111 1101  0x7D
+     * 7 0000 0111  0x07
+     * 8 0111 1111  0x7F
+     * 9 0110 1111  0x6F
+     */
+    segments_out = 0;
+    switch (dev_impl->digits[3]) {
+    case '0': segments_out = 0x3F; break;
+    case '1': segments_out = 0x06; break;
+    case '2': segments_out = 0x5B; break;
+    case '3': segments_out = 0x4F; break;
+    case '4': segments_out = 0x66; break;
+    case '5': segments_out = 0x6D; break;
+    case '6': segments_out = 0x7D; break;
+    case '7': segments_out = 0x07; break;
+    case '8': segments_out = 0x7F; break;
+    case '9': segments_out = 0x6F; break;
+    case ' ':
+    default:  segments_out = 0x00; break;
+    }
+    for (gpio = SMA420564_GPIO_SEGMENT_A; gpio <= SMA420564_GPIO_SEGMENT_G; ++gpio) {
+        gpiod_set_value(dev_impl->gpios[gpio], (segments_out & 1));
+        segments_out >>= 1;
+    }
 }
 
 static ssize_t digits_store(struct device* dev, struct device_attribute* attr, const char* buf, size_t len) {
@@ -100,6 +176,8 @@ static ssize_t digits_store(struct device* dev, struct device_attribute* attr, c
             dev_impl->digits[digit_out--] = ' ';
         }
     }
+
+    update_digits(dev_impl);
 
     return len;
 }
@@ -133,6 +211,7 @@ static struct sma420564_device sma420564_device = {
 };
 
 static int sma420564_init(void) {
+    enum sma420564_gpios gpio;
     int ret;
 
     ret = dev_set_name(&sma420564_device.dev, KBUILD_MODNAME);
@@ -145,6 +224,28 @@ static int sma420564_init(void) {
         pr_err("unable to register root device: error code %d\n", ret);
         return ret;
     }
+
+    for (gpio = 0; gpio < SMA420564_GPIO_MAX; ++gpio) {
+        ret = devm_gpio_request_one(
+            &sma420564_device.dev,
+            sma420564_gpio_definitions[gpio].gpio,
+            sma420564_gpio_definitions[gpio].flags,
+            sma420564_gpio_definitions[gpio].con_id
+        );
+        if (ret) {
+            pr_err(
+                "unable to obtain GPIO %u for %s\n",
+                sma420564_gpio_definitions[gpio].gpio,
+                sma420564_gpio_definitions[gpio].con_id
+            );
+        } else {
+            sma420564_device.gpios[gpio] = gpio_to_desc(sma420564_gpio_definitions[gpio].gpio);
+            if (IS_ERR(sma420564_device.gpios[gpio])) {
+                pr_err("unable to get description for GPIO %u\n", sma420564_gpio_definitions[gpio].gpio);
+            }
+        }
+    }
+    update_digits(&sma420564_device);
 
     return 0;
 }
