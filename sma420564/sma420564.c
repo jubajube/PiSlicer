@@ -18,7 +18,7 @@
  *   Pin    Function
  *    1     Segment E anode
  *    2     Segment D anode
- *    3     Decimal point anode
+ *    3     Segment P (decimal point) anode
  *    4     Segment C anode
  *    5     Segment G anode
  *    6     Digit 4 cathode
@@ -29,7 +29,7 @@
  *   11     Segment A anode
  *   12     Digit 1 cathode
  *
- * The seven segments are spatially arranged and labeled according to the
+ * The eight segments are spatially arranged and labeled according to the
  * following, which is consistent with the Wikipedia entry for
  * "Seven-segment display"
  * (https://en.wikipedia.org/wiki/Seven-segment_display):
@@ -40,7 +40,7 @@
  *    GGGG
  *   E    C
  *   E    C
- *    DDDD
+ *    DDDD  P
  *
  * The component has no internal current limiters, and so may require
  * resistors or other such current limiters in a practical design.
@@ -76,6 +76,7 @@ enum sma420564_gpios {
     SMA420564_GPIO_SEGMENT_E,
     SMA420564_GPIO_SEGMENT_F,
     SMA420564_GPIO_SEGMENT_G,
+    SMA420564_GPIO_SEGMENT_P,
     SMA420564_GPIO_DIGIT_1,
     SMA420564_GPIO_DIGIT_2,
     SMA420564_GPIO_DIGIT_3,
@@ -98,6 +99,7 @@ static struct sma420564_gpio_definition sma420564_gpio_definitions[SMA420564_GPI
     { "Segment E anode", 16, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_LOW */ },
     { "Segment F anode", 20, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_LOW */ },
     { "Segment G anode", 21, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_LOW */ },
+    { "Segment P anode", 24, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_LOW */ },
     { "Digit 1 cathode", 6, GPIOF_OUT_INIT_HIGH /* GPIOD_OUT_HIGH */ },
     { "Digit 2 cathode", 13, GPIOF_OUT_INIT_HIGH /* GPIOD_OUT_HIGH */ },
     { "Digit 3 cathode", 19, GPIOF_OUT_INIT_HIGH /* GPIOD_OUT_HIGH */ },
@@ -108,6 +110,7 @@ struct sma420564_device {
     struct device dev;
 
     char digits[4];
+    int decimal_points[4];
     unsigned long refresh_rate_hz;
     int brightness_percent;
 
@@ -141,7 +144,7 @@ static void prepare_update_digits(struct sma420564_device* dev_impl) {
 
         /*
          * Digit  Segment   Code   Spatial Arrangement
-         *       XGFE DCBA
+         *       PGFE DCBA
          * ----- ---------  ----   -------------------
          *   0   0011 1111  0x3F
          *   1   0000 0110  0x06          AAAA
@@ -225,14 +228,17 @@ static void prepare_update_digits(struct sma420564_device* dev_impl) {
         case ' ':
         default:  segments_out = 0x00; break;
         }
+        if (dev_impl->decimal_points[dev_impl->active_digit]) {
+            segments_out |= 0x80;
+        }
         dev_impl->segments_out = segments_out;
-        for (gpio = SMA420564_GPIO_SEGMENT_A; gpio <= SMA420564_GPIO_SEGMENT_G; ++gpio) {
+        for (gpio = SMA420564_GPIO_SEGMENT_A; gpio <= SMA420564_GPIO_SEGMENT_P; ++gpio) {
             if ((segments_out & 1) != 0) {
                 ++segments_lit;
             }
             segments_out >>= 1;
         }
-        dev_impl->duty_cycle_percent = dev_impl->brightness_percent * segments_lit / 7;
+        dev_impl->duty_cycle_percent = dev_impl->brightness_percent * segments_lit / 8;
     }
 }
 
@@ -243,7 +249,7 @@ static void execute_update_digits(struct work_struct* work) {
 
     gpiod_set_value_cansleep(dev_impl->gpios[SMA420564_GPIO_DIGIT_1 + dev_impl->last_digit], 1);
     if (!dev_impl->resting) {
-        for (gpio = SMA420564_GPIO_SEGMENT_A; gpio <= SMA420564_GPIO_SEGMENT_G; ++gpio) {
+        for (gpio = SMA420564_GPIO_SEGMENT_A; gpio <= SMA420564_GPIO_SEGMENT_P; ++gpio) {
             gpiod_set_value_cansleep(dev_impl->gpios[gpio], (segments_out & 1));
             segments_out >>= 1;
         }
@@ -256,33 +262,53 @@ static ssize_t digits_show(struct device* dev, struct device_attribute* attr, ch
     struct sma420564_device* dev_impl = container_of(dev, struct sma420564_device, dev);
     return scnprintf(
         buf, PAGE_SIZE,
-        "%c%c%c%c",
-        dev_impl->digits[0],
-        dev_impl->digits[1],
-        dev_impl->digits[2],
-        dev_impl->digits[3]
+        "%c%s%c%s%c%s%c%s",
+        dev_impl->digits[0], dev_impl->decimal_points[0] ? "." : "",
+        dev_impl->digits[1], dev_impl->decimal_points[1] ? "." : "",
+        dev_impl->digits[2], dev_impl->decimal_points[2] ? "." : "",
+        dev_impl->digits[3], dev_impl->decimal_points[3] ? "." : ""
     );
 }
 
 static ssize_t digits_store(struct device* dev, struct device_attribute* attr, const char* buf, size_t len) {
     struct sma420564_device* dev_impl = container_of(dev, struct sma420564_device, dev);
-    int digit_in = 3;
-    int digit_out = 3;
+    int digit_in = 0;
+    int digit_out;
 
-    if (digit_in >= len) {
-        digit_in = len - 1;
+    for (digit_out = 0; digit_out < 4; ++digit_out) {
+        dev_impl->digits[digit_out] = ' ';
+        dev_impl->decimal_points[digit_out] = 0;
     }
-    while (
-        (digit_in >= 0)
-        && (buf[digit_in] < 32)
-    ) {
-        --digit_in;
-    }
-    while (digit_out >= 0) {
-        if (digit_in >= 0) {
-            dev_impl->digits[digit_out--] = buf[digit_in--];
+
+    digit_out = 0;
+    for (digit_in = 0; digit_in < len; ++digit_in) {
+        if (
+            (buf[digit_in] < 32)
+            || (digit_out >= 4)
+        ) {
+            break;
+        }
+
+        if (
+            (buf[digit_in] == '.')
+            && (digit_out > 0)
+        ) {
+            dev_impl->decimal_points[digit_out - 1] = 1;
         } else {
-            dev_impl->digits[digit_out--] = ' ';
+            dev_impl->digits[digit_out++] = buf[digit_in];
+        }
+    }
+
+    if (digit_out < 4) {
+        digit_in = digit_out - 1;
+        for (digit_out = 3; digit_out >= 0; --digit_out, --digit_in) {
+            if (digit_in >= 0) {
+                dev_impl->digits[digit_out] = dev_impl->digits[digit_in];
+                dev_impl->decimal_points[digit_out] = dev_impl->decimal_points[digit_in];
+            } else {
+                dev_impl->digits[digit_out] = ' ';
+                dev_impl->decimal_points[digit_out] = 0;
+            }
         }
     }
 
