@@ -157,9 +157,9 @@ static void prepare_update_digits(struct sma420564_device* dev_impl) {
          *   -   0100 0000  0x40
          *
          *   A   0111 0111  0x77
-         *   B   0111 1111  0x7F
+         *   B   0111 1110  0x7E
          *   C   0011 1001  0x39
-         *   D   0011 1111  0x3F
+         *   D   0011 1110  0x3E
          *   E   0111 1001  0x79
          *   F   0111 0001  0x71
          *   G   0111 1101  0x7D
@@ -197,9 +197,9 @@ static void prepare_update_digits(struct sma420564_device* dev_impl) {
         case '9': segments_out = 0x6F; break;
         case '-': segments_out = 0x40; break;
         case 'A': segments_out = 0x77; break;
-        case 'B': segments_out = 0x7F; break;
+        case 'B': segments_out = 0x7E; break;
         case 'C': segments_out = 0x39; break;
-        case 'D': segments_out = 0x3F; break;
+        case 'D': segments_out = 0x3E; break;
         case 'E': segments_out = 0x79; break;
         case 'F': segments_out = 0x71; break;
         case 'G': segments_out = 0x7D; break;
