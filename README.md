@@ -77,5 +77,4 @@ Notes for hardware designers:
 3. The common anode/cathode pins, as they collect the current from
    up to eight separate segments, may draw more current than a typical
    GPIO pin can drive.  NPN transistors can be used to provide the
-   additional current.  For an example, see the following
-     http://learn.parallax.com/4-digit-7-segment-led-display-arduino-demo
+   additional current.  For an example, see http://learn.parallax.com/4-digit-7-segment-led-display-arduino-demo
