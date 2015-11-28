@@ -62,8 +62,11 @@
 #include <linux/kernel.h>
 #include <linux/kobject.h>
 #include <linux/module.h>
-//#include <linux/platform_device.h>
+#include <linux/platform_device.h>
+#include <linux/slab.h>
 #include <linux/workqueue.h>
+
+#define NUM_DIGITS 4
 
 #define DEFAULT_REFRESH_RATE_HZ    100
 #define DEFAULT_BRIGHTNESS_PERCENT 100
@@ -84,33 +87,26 @@ enum sma420564_gpios {
     SMA420564_GPIO_MAX
 };
 
-struct sma420564_gpio_definition {
-    const char* con_id;
-//    enum gpiod_flags flags;
-    unsigned gpio;
-    unsigned long flags;
-};
-
-static struct sma420564_gpio_definition sma420564_gpio_definitions[SMA420564_GPIO_MAX] = {
-    { "Segment A anode", 25, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_LOW */ },
-    { "Segment B anode", 8, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_LOW */ },
-    { "Segment C anode", 7, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_LOW */ },
-    { "Segment D anode", 12, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_LOW */ },
-    { "Segment E anode", 16, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_LOW */ },
-    { "Segment F anode", 20, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_LOW */ },
-    { "Segment G anode", 21, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_LOW */ },
-    { "Segment P anode", 24, GPIOF_OUT_INIT_LOW /* GPIOD_OUT_LOW */ },
-    { "Digit 1 cathode", 6, GPIOF_OUT_INIT_HIGH /* GPIOD_OUT_HIGH */ },
-    { "Digit 2 cathode", 13, GPIOF_OUT_INIT_HIGH /* GPIOD_OUT_HIGH */ },
-    { "Digit 3 cathode", 19, GPIOF_OUT_INIT_HIGH /* GPIOD_OUT_HIGH */ },
-    { "Digit 4 cathode", 26, GPIOF_OUT_INIT_HIGH /* GPIOD_OUT_HIGH */ }
+static const char* sma420564_gpio_consumers[SMA420564_GPIO_MAX] = {
+    "sa",
+    "sb",
+    "sc",
+    "sd",
+    "se",
+    "sf",
+    "sg",
+    "sp",
+    "d1",
+    "d2",
+    "d3",
+    "d4",
 };
 
 struct sma420564_device {
     struct device dev;
 
-    char digits[4];
-    int decimal_points[4];
+    char digits[NUM_DIGITS];
+    int decimal_points[NUM_DIGITS];
     unsigned long refresh_rate_hz;
     int brightness_percent;
 
@@ -138,7 +134,7 @@ static void prepare_update_digits(struct sma420564_device* dev_impl) {
         dev_impl->resting = 0;
     }
     if (!dev_impl->resting) {
-        if (++dev_impl->active_digit > 3) {
+        if (++dev_impl->active_digit >= NUM_DIGITS) {
             dev_impl->active_digit = 0;
         }
 
@@ -247,15 +243,39 @@ static void execute_update_digits(struct work_struct* work) {
     enum sma420564_gpios gpio;
     int segments_out = dev_impl->segments_out;
 
-    gpiod_set_value_cansleep(dev_impl->gpios[SMA420564_GPIO_DIGIT_1 + dev_impl->last_digit], 1);
+    gpiod_set_value_cansleep(dev_impl->gpios[SMA420564_GPIO_DIGIT_1 + dev_impl->last_digit], 0);
     if (!dev_impl->resting) {
         for (gpio = SMA420564_GPIO_SEGMENT_A; gpio <= SMA420564_GPIO_SEGMENT_P; ++gpio) {
             gpiod_set_value_cansleep(dev_impl->gpios[gpio], (segments_out & 1));
             segments_out >>= 1;
         }
-        gpiod_set_value_cansleep(dev_impl->gpios[SMA420564_GPIO_DIGIT_1 + dev_impl->active_digit], 0);
+        gpiod_set_value_cansleep(dev_impl->gpios[SMA420564_GPIO_DIGIT_1 + dev_impl->active_digit], 1);
         dev_impl->last_digit = dev_impl->active_digit;
     }
+}
+
+static enum hrtimer_restart sma420564_digit_timer_tick(struct hrtimer* data) {
+    struct sma420564_device* dev_impl = container_of(data, struct sma420564_device, digit_timer);
+    unsigned long period = 1000000000 / (NUM_DIGITS * dev_impl->refresh_rate_hz);
+
+    prepare_update_digits(dev_impl);
+    if (
+        (dev_impl->duty_cycle_percent > 0)
+        && (dev_impl->duty_cycle_percent < 100)
+    ) {
+        period = period / 100 * (dev_impl->resting ? (100 - dev_impl->duty_cycle_percent) : dev_impl->duty_cycle_percent);
+    }
+    (void)schedule_work(&dev_impl->update_digits_work);
+    hrtimer_add_expires_ns(&dev_impl->digit_timer, period);
+    return HRTIMER_RESTART;
+}
+
+static void sma420564_device_release(struct device* dev) {
+    struct sma420564_device* dev_impl = container_of(dev, struct sma420564_device, dev);
+    (void)hrtimer_cancel(&dev_impl->digit_timer);
+    (void)cancel_work_sync(&dev_impl->update_digits_work);
+    pr_info("device removed: %s\n", dev_name(dev));
+    kfree(dev_impl);
 }
 
 static ssize_t digits_show(struct device* dev, struct device_attribute* attr, char* buf) {
@@ -275,7 +295,7 @@ static ssize_t digits_store(struct device* dev, struct device_attribute* attr, c
     int digit_in = 0;
     int digit_out;
 
-    for (digit_out = 0; digit_out < 4; ++digit_out) {
+    for (digit_out = 0; digit_out < NUM_DIGITS; ++digit_out) {
         dev_impl->digits[digit_out] = ' ';
         dev_impl->decimal_points[digit_out] = 0;
     }
@@ -284,7 +304,7 @@ static ssize_t digits_store(struct device* dev, struct device_attribute* attr, c
     for (digit_in = 0; digit_in < len; ++digit_in) {
         if (
             (buf[digit_in] < 32)
-            || (digit_out >= 4)
+            || (digit_out >= NUM_DIGITS)
         ) {
             break;
         }
@@ -299,9 +319,9 @@ static ssize_t digits_store(struct device* dev, struct device_attribute* attr, c
         }
     }
 
-    if (digit_out < 4) {
+    if (digit_out < NUM_DIGITS) {
         digit_in = digit_out - 1;
-        for (digit_out = 3; digit_out >= 0; --digit_out, --digit_in) {
+        for (digit_out = NUM_DIGITS - 1; digit_out >= 0; --digit_out, --digit_in) {
             if (digit_in >= 0) {
                 dev_impl->digits[digit_out] = dev_impl->digits[digit_in];
                 dev_impl->decimal_points[digit_out] = dev_impl->decimal_points[digit_in];
@@ -359,118 +379,120 @@ static const struct attribute_group* sma420564_attr_groups[] = {
     NULL
 };
 
-static void sma420564_device_release(struct device* dev) {
-    struct sma420564_device* dev_impl = container_of(dev, struct sma420564_device, dev);
-    (void)hrtimer_cancel(&dev_impl->digit_timer);
-    (void)cancel_work_sync(&dev_impl->update_digits_work);
-}
-
-static enum hrtimer_restart sma420564_digit_timer_tick(struct hrtimer* data) {
-    struct sma420564_device* dev_impl = container_of(data, struct sma420564_device, digit_timer);
-    unsigned long period = 1000000000 / (4 * dev_impl->refresh_rate_hz);
-
-    prepare_update_digits(dev_impl);
-    if (
-        (dev_impl->duty_cycle_percent > 0)
-        && (dev_impl->duty_cycle_percent < 100)
-    ) {
-        period = period / 100 * (dev_impl->resting ? (100 - dev_impl->duty_cycle_percent) : dev_impl->duty_cycle_percent);
-    }
-    (void)schedule_work(&dev_impl->update_digits_work);
-    hrtimer_add_expires_ns(&dev_impl->digit_timer, period);
-    return HRTIMER_RESTART;
-}
-
-static struct sma420564_device sma420564_device = {
-    .digits = {' ', ' ', ' ', ' '},
-    .refresh_rate_hz = DEFAULT_REFRESH_RATE_HZ,
-    .brightness_percent = DEFAULT_BRIGHTNESS_PERCENT,
-    .dev = {
-        .release = sma420564_device_release,
-        .groups = sma420564_attr_groups,
-    },
+struct sma420564_driver {
+    int num_devices;
+    struct sma420564_device* devices[];
 };
 
-static int sma420564_init(void) {
+static int sma420564_probe(struct platform_device* pdev) {
+    struct sma420564_driver* drv;
+    struct fwnode_handle* child;
+    struct device_node* np;
+    int count, digit, ret;
     enum sma420564_gpios gpio;
-    int ret;
+    struct sma420564_device* cdev;
 
-    INIT_WORK(&sma420564_device.update_digits_work, execute_update_digits);
-    ret = dev_set_name(&sma420564_device.dev, KBUILD_MODNAME);
-    if (ret) {
-        pr_err("unable to set root device name: error code %d\n", ret);
-        return ret;
-    }
-    ret = device_register(&sma420564_device.dev);
-    if (ret) {
-        pr_err("unable to register root device: error code %d\n", ret);
-        return ret;
+    count = device_get_child_node_count(&pdev->dev);
+    if (!count) {
+        return -ENODEV;
     }
 
-    for (gpio = 0; gpio < SMA420564_GPIO_MAX; ++gpio) {
-        ret = devm_gpio_request_one(
-            &sma420564_device.dev,
-            sma420564_gpio_definitions[gpio].gpio,
-            sma420564_gpio_definitions[gpio].flags,
-            sma420564_gpio_definitions[gpio].con_id
-        );
-        if (ret) {
-            pr_err(
-                "unable to obtain GPIO %u for %s\n",
-                sma420564_gpio_definitions[gpio].gpio,
-                sma420564_gpio_definitions[gpio].con_id
-            );
-        } else {
-            sma420564_device.gpios[gpio] = gpio_to_desc(sma420564_gpio_definitions[gpio].gpio);
-            if (IS_ERR(sma420564_device.gpios[gpio])) {
-                pr_err("unable to get description for GPIO %u\n", sma420564_gpio_definitions[gpio].gpio);
-                sma420564_device.gpios[gpio] = NULL;
+    drv = devm_kzalloc(&pdev->dev, sizeof(*drv) + sizeof(*drv->devices) * count, GFP_KERNEL);
+    if (!drv) {
+        return -ENOMEM;
+    }
+    platform_set_drvdata(pdev, drv);
+
+    device_for_each_child_node(&pdev->dev, child) {
+        np = of_node(child);
+
+        cdev = kzalloc(sizeof(*cdev), GFP_KERNEL);
+        if (!cdev) {
+            ret = -ENOMEM;
+            goto unwind;
+        }
+        device_initialize(&cdev->dev);
+        for (digit = 0; digit < NUM_DIGITS; ++digit) {
+            cdev->digits[digit] = ' ';
+        }
+        cdev->refresh_rate_hz = DEFAULT_REFRESH_RATE_HZ;
+        cdev->brightness_percent = DEFAULT_BRIGHTNESS_PERCENT;
+        cdev->dev.parent = &pdev->dev;
+        cdev->dev.release = sma420564_device_release;
+        cdev->dev.groups = sma420564_attr_groups;
+
+        for (gpio = 0; gpio < SMA420564_GPIO_MAX; ++gpio) {
+            cdev->gpios[gpio] = devm_get_gpiod_from_child(&pdev->dev, sma420564_gpio_consumers[gpio], child);
+            if (IS_ERR(cdev->gpios[gpio])) {
+                ret = PTR_ERR(cdev->gpios[gpio]);
+                pr_err("unable to get %s GPIO: error code %d\n", sma420564_gpio_consumers[gpio], ret);
+                goto unwind_dev_partial;
+            }
+            ret = gpiod_direction_output(cdev->gpios[gpio], 0);
+            if (ret) {
+                pr_err("unable to set %s GPIO direction: error code %d\n", sma420564_gpio_consumers[gpio], ret);
+                goto unwind_dev_partial;
             }
         }
+
+        INIT_WORK(&cdev->update_digits_work, execute_update_digits);
+        ret = dev_set_name(&cdev->dev, np->name);
+        if (ret) {
+            pr_err("unable to set %s device name: error code %d\n", np->name, ret);
+            goto unwind_dev_partial;
+        }
+        ret = device_add(&cdev->dev);
+        if (ret) {
+            pr_err("unable to register %s device: error code %d\n", np->name, ret);
+            goto unwind;
+        }
+        drv->devices[drv->num_devices++] = cdev;
+        pr_info("device added: %s\n", np->name);
+
+        hrtimer_init(&cdev->digit_timer, CLOCK_MONOTONIC, HRTIMER_MODE_ABS);
+        cdev->digit_timer.function = sma420564_digit_timer_tick;
+        hrtimer_start(&cdev->digit_timer, ktime_get(), HRTIMER_MODE_ABS);
     }
 
-    hrtimer_init(&sma420564_device.digit_timer, CLOCK_MONOTONIC, HRTIMER_MODE_ABS);
-    sma420564_device.digit_timer.function = sma420564_digit_timer_tick;
-    hrtimer_start(&sma420564_device.digit_timer, ktime_get(), HRTIMER_MODE_ABS);
+    return 0;
+unwind_dev_partial:
+    kfree(cdev);
+unwind:
+    for (count = drv->num_devices - 1; count >= 0; --count) {
+        device_unregister(&drv->devices[count]->dev);
+    }
+    return ret;
+}
 
+static int sma420564_remove(struct platform_device* pdev) {
+    struct sma420564_driver* drv = platform_get_drvdata(pdev);
+    int count;
+
+    for (count = drv->num_devices - 1; count >= 0; --count) {
+        device_unregister(&drv->devices[count]->dev);
+    }
     return 0;
 }
 
-static void sma420564_exit(void) {
-    device_unregister(&sma420564_device.dev);
-}
+static const struct of_device_id of_sma420564_match[] = {
+    { .compatible = "sma420564", },
+    {},
+};
 
-//static int sma420564_probe(struct platform_device* pdev) {
-//    printk(KERN_INFO "Hello world 1.\n");
-//    return 0;
-//}
-//
-//static int sma420564_remove(struct platform_device* pdev) {
-//    printk(KERN_INFO "Goodbye world 1.\n");
-//    return 0;
-//}
-//
-//static const struct of_device_id of_sma420564_match[] = {
-//    { .compatible = "sma420564", },
-//    {},
-//};
-//
-//MODULE_DEVICE_TABLE(of, of_sma420564_match);
-//
-//static struct platform_driver sma420564_driver = {
-//    .probe = sma420564_probe,
-//    .remove = sma420564_remove,
-//    .driver = {
-//        .name = "sma420564",
-//        .of_match_table = of_sma420564_match,
-//    },
-//};
-//
-//module_platform_driver(sma420564_driver);
+MODULE_DEVICE_TABLE(of, of_sma420564_match);
 
-module_init(sma420564_init);
-module_exit(sma420564_exit);
+static struct platform_driver sma420564_driver = {
+    .probe = sma420564_probe,
+    .remove = sma420564_remove,
+    .driver = {
+        .name = "sma420564",
+        .of_match_table = of_sma420564_match,
+    },
+};
+
+module_platform_driver(sma420564_driver);
 
 MODULE_DESCRIPTION("SMA420564 LED Driver");
 MODULE_AUTHOR("Richard Walters <jubajube@gmail.com>");
 MODULE_LICENSE("Dual MIT/GPL");
+MODULE_ALIAS("platform:sma420564");

@@ -1,15 +1,25 @@
 /dts-v1/;
 
 / {
-  compatible = "brcm,bcm2708";
-  
   fragment@0 {
-    target = <&leds>;
+    target = <&soc>;
     __overlay__ {
-      green {
-        label = "led2";
-        gpios = <&gpio 24 0>;
-        default-state = "off";
+      sma420564 {
+        compatible = "sma420564";
+        panel0 {
+          sa-gpio = <&gpio 25 0>;
+          sb-gpio = <&gpio 8 0>;
+          sc-gpio = <&gpio 7 0>;
+          sd-gpio = <&gpio 12 0>;
+          se-gpio = <&gpio 16 0>;
+          sf-gpio = <&gpio 20 0>;
+          sg-gpio = <&gpio 21 0>;
+          sp-gpio = <&gpio 24 0>;
+          d1-gpio = <&gpio 6 1>;
+          d2-gpio = <&gpio 13 1>;
+          d3-gpio = <&gpio 19 1>;
+          d4-gpio = <&gpio 26 1>;
+        };
       };
     };
   };
