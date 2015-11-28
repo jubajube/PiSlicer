@@ -1,0 +1,20 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 14
+VisualStudioVersion = 14.0.23107.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution FIles", "Solution FIles", "{1226C855-BAF8-4063-92DD-54EA8D538BE1}"
+	ProjectSection(SolutionItems) = preProject
+		breadboard-overlay.dts = breadboard-overlay.dts
+		gpio-segled.c = gpio-segled.c
+		LICENSE = LICENSE
+		Makefile = Makefile
+		README.md = README.md
+		SConscript = SConscript
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

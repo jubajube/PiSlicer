@@ -3,8 +3,6 @@ SConscript
 
 This file is used by SCons as a blueprint for how to build this
 component as a linux kernel module.
-
-Copyright (c) 2015 by Richard Walters
 """
 
 import os
