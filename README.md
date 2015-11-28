@@ -41,6 +41,7 @@ following, which is consistent with the de-facto standard described in
 Wikipedia entry for "Seven-segment display"
 (https://en.wikipedia.org/wiki/Seven-segment_display):
 
+```
    AAAA
   F    B
   F    B
@@ -48,6 +49,7 @@ Wikipedia entry for "Seven-segment display"
   E    C
   E    C
    DDDD  P
+```
 
 An example of this type of device is the package with model identifier
 "SMA420564" etched in dot-matrix print on the side that can be found in
@@ -56,19 +58,20 @@ Raspberry Pi.  Its datasheet, if one exists, has proven too elusive to
 find online.  Nevertheless, the segment and digit pins are easily
 determined through experimentation to be as follows:
 
-  Pin    Function
-   1     Segment E anode
-   2     Segment D anode
-   3     Segment P (decimal point) anode
-   4     Segment C anode
-   5     Segment G anode
-   6     Digit 4 cathode
-   7     Segment B anode
-   8     Digit 3 cathode
-   9     Digit 2 cathode
-  10     Segment F anode
-  11     Segment A anode
-  12     Digit 1 cathode
+  Pin |  Function
+----- |  -------------------------------
+   1  |  Segment E anode
+   2  |  Segment D anode
+   3  |  Segment P (decimal point) anode
+   4  |  Segment C anode
+   5  |  Segment G anode
+   6  |  Digit 4 cathode
+   7  |  Segment B anode
+   8  |  Digit 3 cathode
+   9  |  Digit 2 cathode
+  10  |  Segment F anode
+  11  |  Segment A anode
+  12  |  Digit 1 cathode
 
 Notes for hardware designers:
 1. The component has no internal current limiters, and so requires
