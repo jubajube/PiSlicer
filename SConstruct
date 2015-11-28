@@ -16,7 +16,7 @@ import sys
 components = [
     # Level 0: No dependencies
     "PiSlicer",
-    "sma420564",
+    "gpio-segled",
 
     # Level 1: Depends on:
     #     PiSlicer

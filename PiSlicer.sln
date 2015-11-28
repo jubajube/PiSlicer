@@ -7,6 +7,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PiSlicer", "PiSlicer\PiSlic
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution FIles", "Solution FIles", "{1226C855-BAF8-4063-92DD-54EA8D538BE1}"
 	ProjectSection(SolutionItems) = preProject
+		breadboard-overlay.dts = breadboard-overlay.dts
 		LICENSE = LICENSE
 		README.md = README.md
 		SConstruct = SConstruct
@@ -14,11 +15,11 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution FIles", "Solution 
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "HelloWorld", "HelloWorld\HelloWorld.vcxproj", "{23D0B23B-3F08-4F7C-87BE-7B4BBEACC7BC}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "sma420564", "sma420564", "{D34921C3-C702-4399-A01C-C8585F8E7B6F}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "gpio-segled", "gpio-segled", "{D34921C3-C702-4399-A01C-C8585F8E7B6F}"
 	ProjectSection(SolutionItems) = preProject
-		sma420564\Makefile = sma420564\Makefile
-		sma420564\SConscript = sma420564\SConscript
-		sma420564\sma420564.c = sma420564\sma420564.c
+		gpio-segled\gpio-segled.c = gpio-segled\gpio-segled.c
+		gpio-segled\Makefile = gpio-segled\Makefile
+		gpio-segled\SConscript = gpio-segled\SConscript
 	EndProjectSection
 EndProject
 Global

@@ -4,9 +4,10 @@
   fragment@0 {
     target = <&soc>;
     __overlay__ {
-      sma420564 {
-        compatible = "sma420564";
+      gpio-segled {
+        compatible = "gpio-segled";
         panel0 {
+          seg-adjust;
           sa-gpio = <&gpio 25 0>;
           sb-gpio = <&gpio 8 0>;
           sc-gpio = <&gpio 7 0>;
