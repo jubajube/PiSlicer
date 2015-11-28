@@ -86,6 +86,12 @@
  *      http://learn.parallax.com/4-digit-7-segment-led-display-arduino-demo
  */
 
+/**
+ * This macro makes use of a hook in the pr_* macros to automatically
+ * insert a prefix to any kernel log message from our driver.
+ *
+ * This needs to be defined before including any kernel headers.
+ */
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/device.h>
@@ -100,13 +106,31 @@
 #include <linux/slab.h>
 #include <linux/workqueue.h>
 
+/**
+ * This is the number of digits the device is expected to have.
+ *
+ * @todo
+ *     Lift this restriction and get the actual number of digits
+ *     from the device tree.
+ */
 #define NUM_DIGITS 4
 
+/**
+ * This is the default rate at which to "scan" the digits of the
+ * device, in Hertz.
+ */
 #define DEFAULT_REFRESH_RATE_HZ    100
+
+/**
+ * This is the default brightness adjustment to make through duty
+ * cycle manipulation, in percent of full duty cycle brightness.
+ */
 #define DEFAULT_BRIGHTNESS_PERCENT 100
 
-static SEG7_CONVERSION_MAP(gpio_segled_seg7map, MAP_ASCII7SEG_ALPHANUM_LC);
-
+/**
+ * These are the internal identifiers of the GPIOs that
+ * are expected of the device.
+ */
 enum gpio_segled_gpios {
     SEGLED_GPIO_SEGMENT_A = 0,
     SEGLED_GPIO_SEGMENT_B,
@@ -123,6 +147,10 @@ enum gpio_segled_gpios {
     SEGLED_GPIO_MAX
 };
 
+/**
+ * These are the external identifiers (consumer identifiers in the
+ * device tree) of the GPIOs that are expected of the device.
+ */
 static const char* gpio_segled_gpio_consumers[SEGLED_GPIO_MAX] = {
     "sa",
     "sb",
@@ -138,26 +166,49 @@ static const char* gpio_segled_gpio_consumers[SEGLED_GPIO_MAX] = {
     "d4",
 };
 
+/**
+ * This is the state structure for a single LED panel.
+ */
 struct gpio_segled_device {
+    // Linux driver model base
     struct device dev;
 
+    // Attributes
     char digits[NUM_DIGITS];
     int decimal_points[NUM_DIGITS];
     unsigned long refresh_rate_hz;
     int brightness_percent;
 
+    // Internal state (non-attributes)
     int resting;
     int last_digit;
     int active_digit;
     int segments_out;
     int duty_cycle_percent;
 
+    // seg-adjust - if set in the device tree, the design uses
+    // current limiters on the common anode/cathode pins, so we need
+    // to adjust duty cycles to match brightness across digits.
     int seg_adjust;
+
+    // Kernel resources
     struct gpio_desc* gpios[SEGLED_GPIO_MAX];
     struct work_struct update_digits_work;
     struct hrtimer digit_timer;
 };
 
+/**
+ * Define a standard seven-segment LED conversion map, used to convert
+ * from a desired digit into the signals to send to each segment pin.
+ */
+static SEG7_CONVERSION_MAP(gpio_segled_seg7map, MAP_ASCII7SEG_ALPHANUM_LC);
+
+/**
+ * This function sets up the device state in preparation for driving
+ * the digit and segments that are next in the scanning cycle.
+ *
+ * It is called directly from the scanning timer callback.
+ */
 static void prepare_update_digits(struct gpio_segled_device* dev_impl) {
     enum gpio_segled_gpios gpio;
     int segments_out;
@@ -196,6 +247,13 @@ static void prepare_update_digits(struct gpio_segled_device* dev_impl) {
     }
 }
 
+/**
+ * This function reconfigures the GPIOs to drive the digit and segments
+ * that are next in the scanning cycle.
+ *
+ * It is called from a kernel worker process scheduled from the scanning
+ * timer callback.
+ */
 static void execute_update_digits(struct work_struct* work) {
     struct gpio_segled_device* dev_impl = container_of(work, struct gpio_segled_device, update_digits_work);
     enum gpio_segled_gpios gpio;
@@ -212,6 +270,14 @@ static void execute_update_digits(struct work_struct* work) {
     }
 }
 
+/**
+ * This is the callback for the scanning timer.  It updates the device state
+ * to reflect the next digit and segments to be driven, and schedules a work
+ * item to reconfigure the GPIOs to match.
+ *
+ * The timer expiration is updated according to the proper duty cycle
+ * configured for the current digit.
+ */
 static enum hrtimer_restart gpio_segled_digit_timer_tick(struct hrtimer* data) {
     struct gpio_segled_device* dev_impl = container_of(data, struct gpio_segled_device, digit_timer);
     unsigned long period = 1000000000 / (NUM_DIGITS * dev_impl->refresh_rate_hz);
@@ -228,6 +294,9 @@ static enum hrtimer_restart gpio_segled_digit_timer_tick(struct hrtimer* data) {
     return HRTIMER_RESTART;
 }
 
+/**
+ * This is called by the kernel whenever a device is removed.
+ */
 static void gpio_segled_device_release(struct device* dev) {
     struct gpio_segled_device* dev_impl = container_of(dev, struct gpio_segled_device, dev);
     (void)hrtimer_cancel(&dev_impl->digit_timer);
@@ -235,6 +304,8 @@ static void gpio_segled_device_release(struct device* dev) {
     pr_info("device removed: %s\n", dev_name(dev));
     kfree(dev_impl);
 }
+
+// digits attribute: the characters to show on the LEDs
 
 static ssize_t digits_show(struct device* dev, struct device_attribute* attr, char* buf) {
     struct gpio_segled_device* dev_impl = container_of(dev, struct gpio_segled_device, dev);
@@ -295,6 +366,8 @@ static ssize_t digits_store(struct device* dev, struct device_attribute* attr, c
 
 static DEVICE_ATTR_RW(digits);
 
+// refresh attribute: desired refresh rate of the device in Hertz
+
 static ssize_t refresh_show(struct device* dev, struct device_attribute* attr, char* buf) {
     struct gpio_segled_device* dev_impl = container_of(dev, struct gpio_segled_device, dev);
     return scnprintf(buf, PAGE_SIZE, "%lu", dev_impl->refresh_rate_hz);
@@ -308,6 +381,8 @@ static ssize_t refresh_store(struct device* dev, struct device_attribute* attr, 
 
 static DEVICE_ATTR_RW(refresh);
 
+// brightness attribute: desired brightness in percent of maximum
+
 static ssize_t brightness_show(struct device* dev, struct device_attribute* attr, char* buf) {
     struct gpio_segled_device* dev_impl = container_of(dev, struct gpio_segled_device, dev);
     return scnprintf(buf, PAGE_SIZE, "%d", dev_impl->brightness_percent);
@@ -320,6 +395,8 @@ static ssize_t brightness_store(struct device* dev, struct device_attribute* att
 }
 
 static DEVICE_ATTR_RW(brightness);
+
+// attribute groups
 
 static struct attribute* gpio_segled_attrs[] = {
     &dev_attr_digits.attr,
@@ -337,11 +414,26 @@ static const struct attribute_group* gpio_segled_attr_groups[] = {
     NULL
 };
 
+/**
+ * This is the state structure for the overall device driver.
+ */
 struct gpio_segled_driver {
+    /**
+     * This is the number of devices registered with the kernel.
+     */
     int num_devices;
+
+    /**
+     * These are the pointers to the individual devices registered
+     * with the kernel.
+     */
     struct gpio_segled_device* devices[];
 };
 
+/**
+ * This is called by the kernel whenever the driver is loaded, to set
+ * up any configured devices.
+ */
 static int gpio_segled_probe(struct platform_device* pdev) {
     struct gpio_segled_driver* drv;
     struct fwnode_handle* child;
@@ -425,6 +517,11 @@ unwind:
     return ret;
 }
 
+/**
+ * This is called by the kernel whenever the driver is unloaded,
+ * in order to clean up any state and release any resources held
+ * directly by the driver.
+ */
 static int gpio_segled_remove(struct platform_device* pdev) {
     struct gpio_segled_driver* drv = platform_get_drvdata(pdev);
     int count;
@@ -435,12 +532,16 @@ static int gpio_segled_remove(struct platform_device* pdev) {
     return 0;
 }
 
+// Open Firmware (OF) information for this driver
+
 static const struct of_device_id of_gpio_segled_match[] = {
     { .compatible = "gpio-segled", },
     {},
 };
 
 MODULE_DEVICE_TABLE(of, of_gpio_segled_match);
+
+// Registration with platform (Linux kernel driver model)
 
 static struct platform_driver gpio_segled_driver = {
     .probe = gpio_segled_probe,
@@ -450,8 +551,9 @@ static struct platform_driver gpio_segled_driver = {
         .of_match_table = of_gpio_segled_match,
     },
 };
-
 module_platform_driver(gpio_segled_driver);
+
+// Linux kernel module metadata
 
 MODULE_DESCRIPTION("GPIO-Based Segmented LED Driver");
 MODULE_AUTHOR("Richard Walters <jubajube@gmail.com>");
