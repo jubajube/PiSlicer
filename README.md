@@ -37,7 +37,7 @@ a '1' versus 4 segments for a '4').
 Only seven-segment devices (really eight-segment, but the decimal point
 segment is often not counted) are currently supported by this driver.
 The LED segments are spatially arranged and labeled according to the
-following, which is consistent with the de-facto standard described in
+following, which is consistent with the de-facto standard described in the
 Wikipedia entry for "Seven-segment display"
 (https://en.wikipedia.org/wiki/Seven-segment_display):
 
