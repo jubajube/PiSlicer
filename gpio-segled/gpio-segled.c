@@ -214,6 +214,9 @@ static void prepare_update_digits(struct gpio_segled_device* dev_impl) {
     int segments_out;
     int segments_lit = 0;
 
+    // If duty cycle is valid and less than 100%, alternate
+    // between resting (all digits off) and not resting (show active digit).
+    // Otherwise, never rest.
     if (
         (dev_impl->duty_cycle_percent > 0)
         && (dev_impl->duty_cycle_percent < 100)
@@ -222,28 +225,43 @@ static void prepare_update_digits(struct gpio_segled_device* dev_impl) {
     } else {
         dev_impl->resting = 0;
     }
-    if (!dev_impl->resting) {
-        if (++dev_impl->active_digit >= NUM_DIGITS) {
-            dev_impl->active_digit = 0;
-        }
 
-        segments_out = map_to_seg7(&gpio_segled_seg7map, dev_impl->digits[dev_impl->active_digit]);
-        if (dev_impl->decimal_points[dev_impl->active_digit]) {
-            segments_out |= 0x80;
-        }
+    // Nothing else to configure if reseting.
+    if (dev_impl->resting) {
+        return;
+    }
 
-        dev_impl->segments_out = segments_out;
+    // Advance to next digit, returning to the first digit at the end.
+    if (++dev_impl->active_digit >= NUM_DIGITS) {
+        dev_impl->active_digit = 0;
+    }
 
-        dev_impl->duty_cycle_percent = dev_impl->brightness_percent;
-        if (dev_impl->seg_adjust) {
-            for (gpio = SEGLED_GPIO_SEGMENT_A; gpio <= SEGLED_GPIO_SEGMENT_P; ++gpio) {
-                if ((segments_out & 1) != 0) {
-                    ++segments_lit;
-                }
-                segments_out >>= 1;
+    // Convert character to display into bitmap selecting the segment
+    // GPIOs to switch on in order to display the desired character.
+    segments_out = map_to_seg7(&gpio_segled_seg7map, dev_impl->digits[dev_impl->active_digit]);
+
+    // Mix in decimal point, if one is present at this position.
+    if (dev_impl->decimal_points[dev_impl->active_digit]) {
+        segments_out |= 0x80;
+    }
+
+    // Save GPIO selection bitmap for use when GPIOs are actually switched
+    // in execute_update_digits.
+    dev_impl->segments_out = segments_out;
+
+    // Compute duty cycle as follows:
+    // 1. Start with brightness setting.
+    // 2. Factor in number of segments lit, if seg-adjust was set
+    //    in device tree.
+    dev_impl->duty_cycle_percent = dev_impl->brightness_percent;
+    if (dev_impl->seg_adjust) {
+        for (gpio = SEGLED_GPIO_SEGMENT_A; gpio <= SEGLED_GPIO_SEGMENT_P; ++gpio) {
+            if ((segments_out & 1) != 0) {
+                ++segments_lit;
             }
-            dev_impl->duty_cycle_percent = dev_impl->duty_cycle_percent * segments_lit / 8;
+            segments_out >>= 1;
         }
+        dev_impl->duty_cycle_percent = dev_impl->duty_cycle_percent * segments_lit / 8;
     }
 }
 
@@ -259,15 +277,23 @@ static void execute_update_digits(struct work_struct* work) {
     enum gpio_segled_gpios gpio;
     int segments_out = dev_impl->segments_out;
 
+    // Make sure the last digit lit is turned off.
     gpiod_set_value_cansleep(dev_impl->gpios[SEGLED_GPIO_DIGIT_1 + dev_impl->last_digit], 0);
-    if (!dev_impl->resting) {
-        for (gpio = SEGLED_GPIO_SEGMENT_A; gpio <= SEGLED_GPIO_SEGMENT_P; ++gpio) {
-            gpiod_set_value_cansleep(dev_impl->gpios[gpio], (segments_out & 1));
-            segments_out >>= 1;
-        }
-        gpiod_set_value_cansleep(dev_impl->gpios[SEGLED_GPIO_DIGIT_1 + dev_impl->active_digit], 1);
-        dev_impl->last_digit = dev_impl->active_digit;
+
+    // Nothing else to do if resting.
+    if (dev_impl->resting) {
+        return;
     }
+
+    // Switch GPIOs to match bitmap of desired character.
+    for (gpio = SEGLED_GPIO_SEGMENT_A; gpio <= SEGLED_GPIO_SEGMENT_P; ++gpio) {
+        gpiod_set_value_cansleep(dev_impl->gpios[gpio], (segments_out & 1));
+        segments_out >>= 1;
+    }
+
+    // Light the active digit.
+    gpiod_set_value_cansleep(dev_impl->gpios[SEGLED_GPIO_DIGIT_1 + dev_impl->active_digit], 1);
+    dev_impl->last_digit = dev_impl->active_digit;
 }
 
 /**
@@ -282,14 +308,22 @@ static enum hrtimer_restart gpio_segled_digit_timer_tick(struct hrtimer* data) {
     struct gpio_segled_device* dev_impl = container_of(data, struct gpio_segled_device, digit_timer);
     unsigned long period = 1000000000 / (NUM_DIGITS * dev_impl->refresh_rate_hz);
 
+    // Advance device state one step in the scanning cycle.
     prepare_update_digits(dev_impl);
+
+    // Calculate next timer period based on duty cycle and whether or
+    // not we're currently resting.
     if (
         (dev_impl->duty_cycle_percent > 0)
         && (dev_impl->duty_cycle_percent < 100)
     ) {
         period = period / 100 * (dev_impl->resting ? (100 - dev_impl->duty_cycle_percent) : dev_impl->duty_cycle_percent);
     }
+
+    // Schedule GPIO switching.
     (void)schedule_work(&dev_impl->update_digits_work);
+
+    // Update the timer to tick again when the current period expires.
     hrtimer_add_expires_ns(&dev_impl->digit_timer, period);
     return HRTIMER_RESTART;
 }
@@ -324,13 +358,18 @@ static ssize_t digits_store(struct device* dev, struct device_attribute* attr, c
     int digit_in = 0;
     int digit_out;
 
+    // Initialize digits with all blanks.
     for (digit_out = 0; digit_out < NUM_DIGITS; ++digit_out) {
         dev_impl->digits[digit_out] = ' ';
         dev_impl->decimal_points[digit_out] = 0;
     }
 
+    // Read in characters one at at time, copying them to the digit
+    // buffer or setting decimal point flags as appropriate.
     digit_out = 0;
     for (digit_in = 0; digit_in < len; ++digit_in) {
+        // Stop early if a non-printable character is encountered
+        // or we run out of output digits.
         if (
             (buf[digit_in] < 32)
             || (digit_out >= NUM_DIGITS)
@@ -338,6 +377,9 @@ static ssize_t digits_store(struct device* dev, struct device_attribute* attr, c
             break;
         }
 
+        // If the character is a decimal point, activate decimal point
+        // for the previous digit (if any).  Otherwise copy the character
+        // into the digit buffer.
         if (
             (buf[digit_in] == '.')
             && (digit_out > 0)
@@ -348,6 +390,8 @@ static ssize_t digits_store(struct device* dev, struct device_attribute* attr, c
         }
     }
 
+    // If not all digits were populated, shift them to the right, padding
+    // the left with blanks.
     if (digit_out < NUM_DIGITS) {
         digit_in = digit_out - 1;
         for (digit_out = NUM_DIGITS - 1; digit_out >= 0; --digit_out, --digit_in) {
@@ -361,6 +405,8 @@ static ssize_t digits_store(struct device* dev, struct device_attribute* attr, c
         }
     }
 
+    // Always return size of input buffer to prevent the user from doing
+    // something silly like trying to write for a second time.
     return len;
 }
 
@@ -442,20 +488,28 @@ static int gpio_segled_probe(struct platform_device* pdev) {
     enum gpio_segled_gpios gpio;
     struct gpio_segled_device* cdev;
 
+    // Get the number of devices listed in the device tree.  Return early
+    // with an error if none are found.
     count = device_get_child_node_count(&pdev->dev);
     if (!count) {
         return -ENODEV;
     }
 
+    // Allocate memory for the driver state, with enough space to fit
+    // as many device pointers as there are devices listed in the device tree.
+    // Stash the driver state in the platform private data so we can get
+    // back to it from other platform callbacks such as gpio_segled_remove.
     drv = devm_kzalloc(&pdev->dev, sizeof(*drv) + sizeof(*drv->devices) * count, GFP_KERNEL);
     if (!drv) {
         return -ENOMEM;
     }
     platform_set_drvdata(pdev, drv);
 
+    // Configure and register each device.
     device_for_each_child_node(&pdev->dev, child) {
         np = of_node(child);
 
+        // Allocate and initialize the state for the new device.
         cdev = kzalloc(sizeof(*cdev), GFP_KERNEL);
         if (!cdev) {
             ret = -ENOMEM;
@@ -471,6 +525,8 @@ static int gpio_segled_probe(struct platform_device* pdev) {
         cdev->dev.release = gpio_segled_device_release;
         cdev->dev.groups = gpio_segled_attr_groups;
 
+        // Attempt to reserve and configure the GPIOs listed for
+        // the device in the device tree.
         for (gpio = 0; gpio < SEGLED_GPIO_MAX; ++gpio) {
             if (fwnode_property_present(child, "seg-adjust")) {
                 cdev->seg_adjust = 1;
@@ -488,6 +544,7 @@ static int gpio_segled_probe(struct platform_device* pdev) {
             }
         }
 
+        // Finish configuring the device and register it with the kernel.
         INIT_WORK(&cdev->update_digits_work, execute_update_digits);
         ret = dev_set_name(&cdev->dev, np->name);
         if (ret) {
@@ -502,6 +559,7 @@ static int gpio_segled_probe(struct platform_device* pdev) {
         drv->devices[drv->num_devices++] = cdev;
         pr_info("device added: %s\n", np->name);
 
+        // Configure and start the digit scanning timer.
         hrtimer_init(&cdev->digit_timer, CLOCK_MONOTONIC, HRTIMER_MODE_ABS);
         cdev->digit_timer.function = gpio_segled_digit_timer_tick;
         hrtimer_start(&cdev->digit_timer, ktime_get(), HRTIMER_MODE_ABS);
