@@ -41,15 +41,7 @@ following, which is consistent with the de-facto standard described in
 Wikipedia entry for "Seven-segment display"
 (https://en.wikipedia.org/wiki/Seven-segment_display):
 
-```
-   AAAA
-  F    B
-  F    B
-   GGGG
-  E    C
-  E    C
-   DDDD  P
-```
+![figure showing standard naming and arrangement of segments](https://upload.wikimedia.org/wikipedia/commons/thumb/0/02/7_segment_display_labeled.svg/220px-7_segment_display_labeled.svg.png)
 
 An example of this type of device is the package with model identifier
 "SMA420564" etched in dot-matrix print on the side that can be found in
