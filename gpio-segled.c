@@ -507,7 +507,7 @@ static int gpio_segled_probe(struct platform_device* pdev) {
 
     // Configure and register each device.
     device_for_each_child_node(&pdev->dev, child) {
-        np = of_node(child);
+        np = to_of_node(child);
 
         // Allocate and initialize the state for the new device.
         cdev = kzalloc(sizeof(*cdev), GFP_KERNEL);
